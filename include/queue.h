@@ -5,15 +5,15 @@
 #include <stdbool.h>
 #include <pthread.h>
 
-typedef struct {
+typedef struct Node {
     void *data;
     size_t size;
     struct Node *next;
 } Node;
 
-typedef struct {
-    Node *front;
-    Node *back;
+typedef struct Queue {
+    struct Node *front;
+    struct Node *back;
     size_t count;
 
     pthread_mutex_t lock;
@@ -21,8 +21,8 @@ typedef struct {
 } Queue;
 
 void queue_init(Queue *q);
-Node* create_node(const void *data, size_t size);
-void free_node(Node *node);
+static Node* create_node(const void *data, size_t size);
+static void free_node(Node *node);
 void enqueue(Queue *q, const void *data, size_t size);
 Node* dequeue(Queue *q);
 Node* peek(Queue *q);
