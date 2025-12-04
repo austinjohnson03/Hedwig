@@ -1,5 +1,3 @@
-# Makefile
-
 # Compiler
 CC = gcc
 
@@ -10,7 +8,7 @@ BIN_DIR = bin
 OBJ_DIR = obj
 
 # Target executable
-TARGET = $(BIN_DIR)/app
+TARGET = $(BIN_DIR)/hedwig
 
 # Libraries
 LIBS = -lpq
@@ -46,4 +44,3 @@ clean:
 	rm -rf $(OBJ_DIR)/*.o $(TARGET)
 
 .PHONY: all clean
-
