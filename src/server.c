@@ -1,95 +1,72 @@
-#include "server.h"
-#include "queue.h"
+// #include "server.h"
+// #include "queue.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/socket.h>
-#include <sys/un.h>
 #include <unistd.h>
-#include <pthread.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
 
-#define BUFFER_SIZE 1024
+// TODO: Read in macros from config.
 
-static int server_fd = -1;
-static volatile bool running = false;
+#define BUFFER_SIZE 1024 
+#define PORT 5100
+#define MAX_BACKLOG 64       // affects is how many incoming connections can queue up 
+                             // if your application isn't accept()ing connections as soon as they come in.
 
-int init_server_socket(const char *socket_path) {
-    struct sockaddr_un addr;
-    int fd;
+int main(void) {
+    struct sockaddr_in my_addr; 
+    int sock_fd, rv;
+    char buffer[BUFFER_SIZE] = { 0 };
+    char *hello = "Hello from server\n";
 
-    if ((fd = socket(AF_UNIX, SOCK_STREAM, 0)) == -1) {
-        perror("socket");
-        return -1;
+    sock_fd = socket(AF_INET, SOCK_STREAM, 0);
+
+    if (sock_fd == -1) {
+        fprintf(stderr, "Error initializing server socket.\n");
+        exit(1);
+    }
+    
+    // bzero depricated
+    // bzero(&my_addr, sizeof(my_addr));
+
+    memset(&my_addr, 0, sizeof(my_addr));
+
+    my_addr.sin_family = AF_INET;
+    my_addr.sin_port = htons(PORT);
+    my_addr.sin_addr.s_addr = htonl(INADDR_ANY); //  allows server to accept client on any interface
+
+    socklen_t addrlen = sizeof(my_addr);
+
+    if ((bind(sock_fd, (struct sockaddr *)&my_addr, sizeof(my_addr))) < 0) {
+        fprintf(stderr, "Error binding server socket.\n");
+        exit(1);
     }
 
-    memset(&addr, 0, sizeof(addr));
-    addr.sun_family = AF_UNIX;
-    strncpy(addr.sun_path, socket_path, sizeof(addr.sun_path) - 1);
-    unlink(socket_path);
-
-    if (bind(fd, (struct sockaddr*)&addr, sizeof(addr)) == -1) {
-        perror("bind");
-        close(fd);
-        return -1;
+    int lv = listen(sock_fd, MAX_BACKLOG);
+    if (lv == -1) {
+        fprintf(stderr, "Error listening for connections on server.\n");
+        exit(1);
     }
 
-    if (listen(fd, 5) == -1) {
-        perror("listen");
-        close(fd);
-        return -1;
+    int new_sock = accept(sock_fd, (struct sockaddr *)&my_addr, &addrlen);
+
+    if (new_sock < 0) {
+        fprintf(stderr, "Error accepting connection from client\n");
+        exit(1);
     }
 
-    return fd;
-}
-
-void handle_client(int client_fd, Queue *q) {
-    char buffer[BUFFER_SIZE];
-    ssize_t n = read(client_fd, buffer, BUFFER_SIZE - 1);
-    if (n > 0) {
-        buffer[n] = '\0';
-        printf("Received: %s\n", buffer);
-        enqueue(q, buffer, strlen(buffer) + 1);
+    fprintf(stderr, "Reading from buffer.\n");
+    rv = read(new_sock, buffer, BUFFER_SIZE - 1);
+    if (rv < 0 ) {
+        fprintf(stderr, "Error reading from client.\n");
+        exit(1);
     }
-    close(client_fd);
-}
+    printf("%s\n", buffer);
 
-bool start_server(const char *socket_path, Queue *q) {
-    if (!q) {
-        fprintf(stderr, "Queue cannot be NULL.\n");
-        return false;
-    }
+    close(new_sock);
+    close(sock_fd);
 
-    socket_path = socket_path ? socket_path : DEFAULT_SOCKET_PATH;
-    server_fd = init_server_socket(socket_path);
-    if (server_fd == -1) {
-        return false;
-    }
-
-    running = true;
-    printf("Server listening on %s\n", socket_path);
-
-    while (running) {
-        int client_fd = accept(server_fd, NULL, NULL);
-        if (client_fd == -1) {
-            perror("accept");
-            continue;
-        }
-        handle_client(client_fd, q);
-    }
-
-    cleanup_socket(socket_path);
-    return true;
-}
-
-void stop_server(void) {
-    running = false;
-    if (server_fd != -1) {
-        close(server_fd);
-    }
-}
-
-void cleanup_socket(const char *socket_path) {
-    if (socket_path) {
-        unlink(socket_path);
-    }
+    return 0;
 }
